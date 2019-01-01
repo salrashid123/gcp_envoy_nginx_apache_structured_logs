@@ -1,4 +1,4 @@
-# Nginx/Apache HTTP Structured Logging with Google Cloud LoadBalancer
+# Envoy, Nginx, Apache HTTP Structured Logging with Google Cloud LoadBalancer
 
 
 Google Cloud Logging provides several plugins that allows you to easily emit structured logs for common applications.
@@ -7,9 +7,9 @@ For example, if you install the Stackdriver Logging agent, you can get logs usin
 
 - [https://cloud.google.com/monitoring/agent/plugins/](https://cloud.google.com/monitoring/agent/plugins/)
 
-This sample demonstrates two of these plugins (`apache` and `nginx`) and how to configure them to emit not just structured JSON logs but as a specific [HttpRequest](https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry#httprequest) protocol buffer.
+This sample demonstrates two of these plugins (`apache` and `nginx`) and how to configure them to emit not just structured JSON logs but as a specific [HttpRequest](https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry#httprequest) protocol buffer.  This article also describes how to configure `Envoy` proxy for similar httpRequest logging.
 
-The script below sets up the *full* sample stack with Google Cloud L7 HTTPS loadbalancer and a managed instance group running the webserver.
+The script below sets up the *full* sample stack with Google Cloud L7 HTTPS loadbalancer and a managed instance group running the webserver.  It does not demo `Envoy` with the L7 but you can set that up pretty easily with the template below.
 
 In addition to the `HttpRequest` protocolbuffer, this example and configuration also includes the following in the emitted `LogEntry`
 
@@ -364,6 +364,75 @@ The following details the configurations used for `apache`.  Eventually, this sh
 
 * ```/etc/google-fluentd/config.d/apache.conf```
     - [https://gist.github.com/salrashid123/8e0e8c610475ac9fd893c80325d5fc3a](https://gist.github.com/salrashid123/8e0e8c610475ac9fd893c80325d5fc3a)
+
+
+## Envoy
+
+[Envoy](https://www.envoyproxy.io/) [Access logs](https://www.envoyproxy.io/docs/envoy/latest/configuration/access_log) is fairly customizable and can write to any number of targets.  For example, you can configure `envoy` to emit logs to remotely (see [envoy_control#accesslog](https://github.com/salrashid123/envoy_control#accesslog)) or in this article, locally to a log file where Cloud Logging can do the rest of the legwork.
+
+This article includes two separate configurations for `envoy` and `google-fluentd`:    Default envoy settings and one optimized for GCP that includes the `cloud-trace-context` header.
+
+
+### default
+
+The steps to emit [default logs](https://www.envoyproxy.io/docs/envoy/latest/configuration/access_log#default-format-string) is fairly easy:  just set the path where the logs will write to
+
+```yaml
+      - name: envoy.http_connection_manager
+        config:
+           access_log:
+           - name: envoy.file_access_log
+             config:
+               path: "/tmp/envoy.log"
+```
+
+### Custom header (cloud-trace-context)
+
+You can customize envoy's logs easily by adding in fields like custom headers into the log file.  The following shows a snippet on now to setup the logs that extend the default configuration and just adds `%REQ(X-Cloud-Trace-Context)%`
+
+
+```yaml
+      - name: envoy.http_connection_manager
+        config:
+          access_log:
+          - name: envoy.file_access_log
+            config:
+              path: "/tmp/envoy.log"
+              format: "[%START_TIME%] \"%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%\" %RESPONSE_CODE% %RESPONSE_FLAGS% %BYTES_RECEIVED% %BYTES_SENT% %DURATION% %RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)% \"%REQ(X-FORWARDED-FOR)%\" \"%REQ(USER-AGENT)%\" \"%REQ(X-REQUEST-ID)%\" \"%REQ(:AUTHORITY)%\" \"%UPSTREAM_HOST%\" \"%REQ(X-Cloud-Trace-Context)%\"\n" 
+```
+
+### Testing
+
+To test this, you can incorporate the envoy configurations provided into a similar VM as described above.  Remember to copy 
+
+```
+parser_envoy.rb --> /opt/google-fluentd/embedded/lib/ruby/gems/2.4.0/gems/fluent-plugin-google-cloud-0.7.2/lib/fluent/plugin/out_google_cloud.rb
+```
+
+```
+envoy.conf --> /etc/google-fluentd/config.d/envoy.conf
+```
+
+If you are on a VM with `google-fluentd` and the configurations settings above, restart fluentd and run envoy:
+
+
+```
+./envoy -l info -c envoy_config.yaml 
+```
+
+
+Either send in a request via the LB or directly to test:
+
+```
+curl -H "X-Cloud-Trace-Context: 1212/bbb" -H "X-Forwarded-For: 12.3.4.5, 1.2.3.4" http://localhost:10000
+```
+
+In cloud logging, you will see the standard `httpRequest` payload as well as envoy specific headers:
+
+![images/envoy_output.png](images/envoy_output.png)
+
+From there, you can further customize the headers you want to caputure by modifying the fluentd and envoy configurations.
+
 
 ---
 
