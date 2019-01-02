@@ -1,0 +1,48 @@
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: myapp-deployment
+  labels:
+    type: myapp-deployment-label  
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate    
+  template:
+    metadata:
+      labels:
+        type: myapp   
+    spec:
+      containers:
+      - name: envoy
+        image: gcr.io/PROJECT_NAME/envoy
+        imagePullPolicy: Always
+        ports:
+          - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /_ah/health
+            port: 8080
+        readinessProbe:
+          httpGet:
+            path: /_ah/health
+            scheme: HTTP
+            port: 8080
+      - name: app
+        image: gcr.io/PROJECT_NAME/app
+        imagePullPolicy: Always
+        ports:
+          - containerPort: 10000
+        livenessProbe:
+          httpGet:
+            path: /_ah/health
+            port: 10000
+        readinessProbe:
+          httpGet:
+            path: /_ah/health
+            scheme: HTTP
+            port: 10000
+        env:
+        - name: GCP_PROJECT_ID
+          value: PROJECT_NAME
