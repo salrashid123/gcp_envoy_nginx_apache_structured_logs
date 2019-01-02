@@ -1,4 +1,4 @@
-# Envoy, Nginx, Apache HTTP Structured Logging with Google Cloud LoadBalancer
+# Envoy, Nginx, Apache HTTP Structured Logging with Google Cloud Logging
 
 
 Google Cloud Logging provides several plugins that allows you to easily emit structured logs for common applications.
