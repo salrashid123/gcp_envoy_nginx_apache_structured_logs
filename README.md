@@ -378,12 +378,17 @@ This article includes two separate configurations for `envoy` and `google-fluent
 The steps to emit [default logs](https://www.envoyproxy.io/docs/envoy/latest/configuration/access_log#default-format-string) is fairly easy:  just set the path where the logs will write to
 
 ```yaml
+    filter_chains:
+    - filters:
       - name: envoy.http_connection_manager
-        config:
-           access_log:
-           - name: envoy.file_access_log
-             config:
-               path: "/tmp/envoy.log"
+        typed_config:  
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+          access_log:
+          - name: envoy.access_loggers.file
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog
+              path: "/tmp/envoy.log"
 ```
 
 ### Custom header (cloud-trace-context)
@@ -392,11 +397,16 @@ You can customize envoy's logs easily by adding in fields like custom headers in
 
 
 ```yaml
+    filter_chains:
+    - filters:
       - name: envoy.http_connection_manager
-        config:
+        typed_config:  
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
           access_log:
-          - name: envoy.file_access_log
-            config:
+          - name: envoy.access_loggers.file
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.access_loggers.file.v3.FileAccessLog
               path: "/tmp/envoy.log"
               format: "[%START_TIME%] \"%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%\" %RESPONSE_CODE% %RESPONSE_FLAGS% %BYTES_RECEIVED% %BYTES_SENT% %DURATION% %RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)% \"%REQ(X-FORWARDED-FOR)%\" \"%REQ(USER-AGENT)%\" \"%REQ(X-REQUEST-ID)%\" \"%REQ(:AUTHORITY)%\" \"%UPSTREAM_HOST%\" \"%REQ(X-Cloud-Trace-Context)%\"\n" 
 ```
